@@ -1,12 +1,12 @@
 import {generateRegistrationOptions, verifyRegistrationResponse} from '@simplewebauthn/server';
-import {uint8ArrayToBase64} from '../utils/utils';
+import {base64ToBase64URL, uint8ArrayToBase64} from '../utils/utils';
 import {rpName, rpID, origin} from '../utils/constants';
 import {credentialService} from '../services/credentialService';
 import {userService} from '../services/userService'
 import {RegistrationResponseJSON} from "@simplewebauthn/typescript-types";
+import { decodeClientDataJSON, isoBase64URL } from '@simplewebauthn/server/helpers';
 import { Request, Response, NextFunction } from 'express';
 import { CustomError } from '../middleware/customError';
-
 
 export const handleRegisterStart = async (req: Request, res: Response, next: NextFunction) => {
     const {username} = req.body;
@@ -41,13 +41,13 @@ export const handleRegisterStart = async (req: Request, res: Response, next: Nex
         req.session.currentChallenge = options.challenge;
         res.send(options);
     } catch (error) {
-        next(error instanceof CustomError ? error : new CustomError('Internal Server Error', 500));
+        next(error);
     }
 };
 
 export const handleRegisterFinish = async (req: Request, res: Response, next: NextFunction) => {
     const {body} = req;
-    const {currentChallenge, loggedInUserId} = req.session;
+    const { currentChallenge, loggedInUserId } = req.session;
 
     if (!loggedInUserId) {
         return next(new CustomError('User ID is missing', 400));
@@ -55,6 +55,21 @@ export const handleRegisterFinish = async (req: Request, res: Response, next: Ne
 
     if (!currentChallenge) {
         return next(new CustomError('Current challenge is missing', 400));
+    }
+
+    console.log(body)
+
+    // decodes challenge once
+    let clientDataJSON = decodeClientDataJSON(body.response.clientDataJSON);
+    let decodedChallenge = Buffer.from(clientDataJSON.challenge, 'base64').toString('utf-8')
+    clientDataJSON.challenge = decodedChallenge
+    body.response.clientDataJSON = btoa(JSON.stringify(clientDataJSON))
+
+    // converts body.response.attestationObject from base64 to base64URL if needed
+    let attestationObject = body.response.attestationObject
+
+    if (!isoBase64URL.isBase64url(attestationObject)) {
+        body.response.attestationObject = base64ToBase64URL(attestationObject)
     }
 
     try {
@@ -82,7 +97,8 @@ export const handleRegisterFinish = async (req: Request, res: Response, next: Ne
             next(new CustomError('Verification failed', 400));
         }
     } catch (error) {
-        next(error instanceof CustomError ? error : new CustomError('Internal Server Error', 500));
+        next(error)
+        //next(error instanceof CustomError ? error : new CustomError('Internal Server Error', 500));
     } finally {
         req.session.loggedInUserId = undefined;
         req.session.currentChallenge = undefined;

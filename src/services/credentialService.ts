@@ -1,7 +1,6 @@
 import {promisePool} from '../database';
 import type {AuthenticatorDevice} from '@simplewebauthn/typescript-types';
 
-
 export const credentialService = {
     async saveNewCredential(userId: string, credentialId: string, publicKey: string, counter: number, transports: string) {
         try {

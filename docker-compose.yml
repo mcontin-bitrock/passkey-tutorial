@@ -25,3 +25,9 @@ services:
       - SESSION_SECRET=secret123
     depends_on:
       - db
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /src/controllers
+
